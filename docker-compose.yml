@@ -1,0 +1,35 @@
+services:
+  agent:
+    build:
+      context: .
+      dockerfile: Dockerfile.agent
+    networks:
+      - lab_only        # NO external network attached
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    pids_limit: 64
+    mem_limit: 1g
+    cpus: 1.0
+    env_file: .env
+    environment:
+      AUDIT_DIR: /agent/audit_logs/current_engagement
+    volumes:
+      - ./audit_logs:/agent/audit_logs
+      - ./scope.yaml:/agent/scope.yaml:ro
+      - ./eval_runs:/agent/eval_runs
+
+  dvwa:
+    image: vulnerables/web-dvwa
+    networks:
+      - lab_only
+    # No published ports — reachable only via the internal network
+
+networks:
+  lab_only:
+    driver: bridge
+    internal: true
