@@ -1,24 +1,6 @@
 import time
-from urllib.parse import urlsplit
 
-
-def target_host(raw: str):
-    """Hostname a tool will actually contact, or None if it can't be determined.
-
-    Bare targets containing '/' (e.g. CIDR ranges like 'dvwa/0') are rejected:
-    checking only the part before the slash would let a range escape scope.
-    """
-    if not isinstance(raw, str) or not raw.strip():
-        return None
-    raw = raw.strip()
-    if "://" not in raw:
-        if "/" in raw:
-            return None
-        raw = "//" + raw
-    try:
-        return urlsplit(raw).hostname
-    except ValueError:
-        return None
+from scope import target_host
 
 
 class PentestAgent:

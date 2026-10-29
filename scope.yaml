@@ -1,0 +1,17 @@
+# Per-engagement allowlist. Edit before EVERY run; anything not listed is denied.
+engagement: dvwa-lab
+
+targets:
+  domains:          # exact names; "*.example.com" matches subdomains only
+    - dvwa
+  cidrs: []         # e.g. ["10.10.0.0/24"]
+
+exclude:            # wins over targets
+  domains: []
+  cidrs: []
+
+ports:              # ints or "lo-hi" ranges; nmap defaults to exactly this set
+  - 80
+  - 443
+  - 3306
+  - "8000-8100"

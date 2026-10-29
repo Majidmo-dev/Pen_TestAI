@@ -1,0 +1,7 @@
+# Keep secrets and engagement data out of the image.
+.env
+.git
+audit_logs/
+eval_runs/
+__pycache__/
+*.pyc
