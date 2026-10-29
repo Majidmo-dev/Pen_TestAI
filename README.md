@@ -55,6 +55,7 @@ Without an API key, a built-in MockPlanner demonstrates the full pipeline
 | `approval.py` | Human-in-the-loop for active tools |
 | `eval.py` | Scenarios with manual ground truth, scoring |
 | `main.py` | CLI entrypoint |
+| `squid.conf` | Egress proxy allowlist — agent may reach only the LLM API |
 
 ## Safety properties
 

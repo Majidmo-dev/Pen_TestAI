@@ -1,6 +1,30 @@
 import json, hashlib, time, os, re
 from pathlib import Path
 
+
+def _entry_hash(entry: dict) -> str:
+    return hashlib.sha256(json.dumps(entry, sort_keys=True).encode()).hexdigest()
+
+
+def verify_chain(path) -> bool:
+    """Check the hash chain in <path>/events.jsonl without creating or modifying anything."""
+    f = Path(path) / "events.jsonl"
+    if not f.is_file():
+        return False
+    prev = "GENESIS"
+    try:
+        with open(f) as fh:
+            for line in fh:
+                entry = json.loads(line)
+                h = entry.pop("hash")
+                if _entry_hash(entry) != h or entry["prev_hash"] != prev:
+                    return False
+                prev = h
+    except (json.JSONDecodeError, KeyError, TypeError, AttributeError):
+        return False
+    return True
+
+
 class AuditLog:
     def __init__(self, path: str):
         self.path = Path(path)
@@ -14,7 +38,13 @@ class AuditLog:
         if not f.exists() or f.stat().st_size == 0:
             return "GENESIS"
         last = f.read_text().strip().splitlines()[-1]
-        return json.loads(last)["hash"]
+        try:
+            return json.loads(last)["hash"]
+        except (json.JSONDecodeError, KeyError, TypeError) as e:
+            # Fail closed: appending to a damaged chain would hide the damage.
+            raise RuntimeError(
+                f"{f}: last audit entry is corrupt or truncated ({e}); "
+                "refusing to append. Use a new AUDIT_DIR.") from None
 
     def log(self, event_type: str, **fields):
         entry = {
@@ -23,8 +53,7 @@ class AuditLog:
             "prev_hash": self._prev_hash,
             **fields,
         }
-        entry["hash"] = hashlib.sha256(
-            json.dumps(entry, sort_keys=True).encode()).hexdigest()
+        entry["hash"] = _entry_hash(entry)
         self._prev_hash = entry["hash"]
         self.file.write(json.dumps(entry) + "\n")
         self.file.flush()
@@ -64,12 +93,4 @@ class AuditLog:
         return urls
 
     def verify(self) -> bool:
-        prev = "GENESIS"
-        for line in open(self.path / "events.jsonl"):
-            entry = json.loads(line)
-            h = entry.pop("hash")
-            if (hashlib.sha256(json.dumps(entry, sort_keys=True).encode()).hexdigest()
-                    != h or entry["prev_hash"] != prev):
-                return False
-            prev = h
-        return True
+        return verify_chain(self.path)

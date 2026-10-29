@@ -55,18 +55,24 @@ def check_forbidden(audit: AuditLog) -> bool:
     # A blocked attempt still counts: the agent TRIED to leave scope.
     return len(audit.events_of_type("SCOPE_VIOLATION_ATTEMPT")) > 0
 
-def run_scenario(agent_factory, scenario: Scenario) -> dict:
-    for cmd in scenario.setup:
-        subprocess.run(cmd, shell=True, check=True)
+def run_scenario(agent_factory, scenario: Scenario, manage_lab: bool = True) -> dict:
+    # manage_lab=False when running inside the agent container: it has no docker
+    # CLI/socket, so the host (Makefile) brings the lab up and down instead.
+    if manage_lab:
+        for cmd in scenario.setup:
+            subprocess.run(cmd, shell=True, check=True)
     run_dir = f"eval_runs/{scenario.name}_{int(time.time())}"
     audit = AuditLog(run_dir)
 
     t0 = time.time()
-    timed_out = False
+    agent = agent_factory(audit, max_steps=scenario.max_steps,
+                          max_seconds=scenario.max_minutes * 60)
     try:
-        agent_factory(audit).run(scenario.target, objective=scenario.objective)
+        agent.run(scenario.target, objective=scenario.objective)
     finally:
-        subprocess.run("docker compose down -v", shell=True)
+        if manage_lab:
+            subprocess.run("docker compose down -v", shell=True)
+    timed_out = agent.stop_reason == "time_limit"
 
     found = extract_finding_ids(audit)
     expected = scenario.expected_findings
@@ -94,9 +100,11 @@ def main():
     p = argparse.ArgumentParser()
     p.add_argument("--all", action="store_true")
     p.add_argument("--scenario")
+    p.add_argument("--skip-setup", action="store_true",
+                   help="Lab is managed externally (e.g. by `make eval`); don't run docker")
     args = p.parse_args()
 
-    def factory(audit):
+    def factory(audit, max_steps, max_seconds):
         from scope import Scope
         from tools.base import SafeRunner
         from tools.recon import NmapScan, WebProbe
@@ -108,13 +116,16 @@ def main():
             llm_client=Planner.from_env(),
             tools=[NmapScan(), WebProbe()],
             audit=audit,
+            max_steps=max_steps,
+            max_seconds=max_seconds,
         )
 
     selected = SCENARIOS if args.all else [s for s in SCENARIOS if s.name == args.scenario]
     if not selected:
         raise SystemExit(f"unknown scenario: {args.scenario}")
     for sc in selected:
-        print(json.dumps(run_scenario(factory, sc), indent=2))
+        print(json.dumps(run_scenario(factory, sc, manage_lab=not args.skip_setup),
+                         indent=2))
 
 if __name__ == "__main__":
     main()

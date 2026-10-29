@@ -2,8 +2,9 @@ import json, re, os
 import prompts
 
 class Planner:
-    def __init__(self, client=None):
+    def __init__(self, client=None, model="gpt-4o-mini"):
         self.client = client  # openai.OpenAI or None (mock mode)
+        self.model = model
 
     @classmethod
     def from_env(cls):
@@ -11,7 +12,8 @@ class Planner:
         if not key:
             return MockPlanner()
         import openai
-        return cls(client=openai.OpenAI(api_key=key))
+        return cls(client=openai.OpenAI(api_key=key),
+                   model=os.environ.get("OPENAI_MODEL", "gpt-4o-mini"))
 
     def plan(self, target, history, tools, objective):
         schemas = {name: t.describe() for name, t in tools.items()}
@@ -29,7 +31,7 @@ class Planner:
 
     def _call(self, system, user):
         resp = self.client.chat.completions.create(
-            model="gpt-4o-mini",
+            model=self.model,
             messages=[{"role": "system", "content": system},
                       {"role": "user", "content": user}],
             temperature=0.2,
@@ -37,12 +39,18 @@ class Planner:
         return resp.choices[0].message.content
 
     def _parse(self, raw: str) -> dict:
-        try:
-            step = json.loads(re.search(r"\{.*\}", raw, re.DOTALL).group())
-        except (AttributeError, json.JSONDecodeError):
-            return {"action": "clarify",
-                    "reasoning": f"Unparseable model output: {raw[:300]}"}
-        return step
+        # Take the first complete JSON object; a greedy regex would swallow
+        # everything between the first '{' and the last '}'.
+        decoder = json.JSONDecoder()
+        for m in re.finditer(r"\{", raw or ""):
+            try:
+                step, _ = decoder.raw_decode(raw, m.start())
+            except json.JSONDecodeError:
+                continue
+            if isinstance(step, dict):
+                return step
+        return {"action": "clarify",
+                "reasoning": f"Unparseable model output: {(raw or '')[:300]}"}
 
 class MockPlanner(Planner):
     """Deterministic stand-in so the pipeline runs without an API key."""

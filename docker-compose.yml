@@ -4,7 +4,7 @@ services:
       context: .
       dockerfile: Dockerfile.agent
     networks:
-      - lab_only        # NO external network attached
+      - lab_only        # NO external network attached; LLM API via llm-proxy only
     read_only: true
     tmpfs:
       - /tmp
@@ -18,6 +18,11 @@ services:
     env_file: .env
     environment:
       AUDIT_DIR: /agent/audit_logs/current_engagement
+      # HTTPS only: lab traffic is plain HTTP and must never route via the proxy.
+      HTTPS_PROXY: http://llm-proxy:3128
+      NO_PROXY: dvwa,localhost,127.0.0.1
+    depends_on:
+      - llm-proxy
     volumes:
       - ./audit_logs:/agent/audit_logs
       - ./scope.yaml:/agent/scope.yaml:ro
@@ -29,7 +34,18 @@ services:
       - lab_only
     # No published ports — reachable only via the internal network
 
+  llm-proxy:
+    image: ubuntu/squid
+    networks:
+      - lab_only
+      - egress
+    volumes:
+      - ./squid.conf:/etc/squid/squid.conf:ro
+    # Allows CONNECT to api.openai.com:443 only; everything else is denied.
+
 networks:
   lab_only:
     driver: bridge
     internal: true
+  egress:
+    driver: bridge
