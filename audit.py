@@ -31,7 +31,10 @@ class AuditLog:
         self.path.mkdir(parents=True, exist_ok=True)
         self.file = open(self.path / "events.jsonl", "a", buffering=1)
         self._prev_hash = self._load_last_hash()
-        self._art_n = 0
+        # Continue numbering across runs so earlier artifacts are never overwritten.
+        self._art_n = max((int(m.group(1)) for f in self.path.glob("step_*_*.txt")
+                           if (m := re.fullmatch(r"step_\d+_(\d+)\.txt", f.name))),
+                          default=0)
 
     def _load_last_hash(self) -> str:
         f = self.path / "events.jsonl"
@@ -70,7 +73,8 @@ class AuditLog:
     def log_tool_output(self, step: int, output: str) -> str:
         self._art_n += 1
         fname = f"step_{step:03d}_{self._art_n:02d}.txt"
-        (self.path / fname).write_text(output)
+        with open(self.path / fname, "x") as f:  # "x": never overwrite evidence
+            f.write(output)
         self.log("TOOL_OUTPUT", step=step, artifact=fname,
                  sha256=hashlib.sha256(output.encode()).hexdigest())
         return fname

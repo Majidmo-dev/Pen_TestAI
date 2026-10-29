@@ -1,19 +1,18 @@
 .PHONY: lab-up lab-down run eval verify-audit
 
 lab-up:
-	docker compose up -d dvwa llm-proxy
+	docker compose up -d --wait dvwa llm-proxy
 
 lab-down:
 	docker compose down -v
 
 run: lab-up
-	docker compose run --rm agent python main.py --target dvwa
+	docker compose run --build --rm agent python main.py --target dvwa
 	$(MAKE) lab-down
 
 # The lab is managed here on the host: the agent container has no docker access.
 eval: lab-up
-	sleep 8
-	docker compose run --rm agent python eval.py --all --skip-setup; \
+	docker compose run --build --rm agent python eval.py --all --skip-setup; \
 		status=$$?; $(MAKE) lab-down; exit $$status
 
 verify-audit:

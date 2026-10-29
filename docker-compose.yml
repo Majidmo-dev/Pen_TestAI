@@ -33,6 +33,12 @@ services:
     networks:
       - lab_only
     # No published ports — reachable only via the internal network
+    healthcheck:   # lets `docker compose up --wait` block until Apache answers
+      test: ["CMD", "bash", "-c", "echo > /dev/tcp/127.0.0.1/80"]
+      interval: 2s
+      timeout: 2s
+      retries: 30
+      start_period: 5s
 
   llm-proxy:
     image: ubuntu/squid
